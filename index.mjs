@@ -1,6 +1,7 @@
 import './websocket-server.mjs';
 import './rtmp.mjs';
 import './api-server.mjs';
+import './discord-bot.mjs';
 import { SERVER_CONFIG } from './config.mjs';
 import os from 'os';
 import { readFileSync } from 'fs';
@@ -130,6 +131,7 @@ console.log(`   CORS Origins:         ${SERVER_CONFIG.ALLOWED_ORIGINS.join(', ')
 console.log(`   Admin Codes:          ${SERVER_CONFIG.ADMIN_ACCESS_CODES.length} code(s) configuré(s)`);
 console.log(`   JWT Secret:           ${isDefaultJWT ? '⚠️  DÉFAUT (à changer!)' : '✅ Personnalisé'}`);
 console.log(`   Discord Webhook:      ${hasDiscordWebhook ? '✅ Configuré' : '❌ Non configuré'}`);
+console.log(`   Discord Bot:          ${SERVER_CONFIG.DISCORD_BOT_TOKEN ? '✅ Configuré' : '❌ Non configuré'}`);
 console.log('');
 
 console.log('📺 CONFIGURATION OBS STUDIO');
