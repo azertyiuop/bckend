@@ -3,6 +3,7 @@ import cors from 'cors';
 import { getDatabase } from './lib/db-instance.mjs';
 import { AnalyticsAPI } from './api/analytics.mjs';
 import { ModerationAPI } from './api/moderation.mjs';
+import { AuthAPI } from './api/Auth.mjs';
 
 const app = express();
 const PORT = process.env.API_PORT || 3002;
@@ -29,6 +30,13 @@ app.use(express.json());
 const db = getDatabase();
 const analyticsAPI = new AnalyticsAPI(db);
 const moderationAPI = new ModerationAPI(db);
+const authAPI = new AuthAPI(db);
+
+app.post('/api/auth/login', async (req, res) => {
+  const { username, password } = req.body;
+  const result = await authAPI.login(username, password);
+  res.json(result);
+});
 
 // Analytics routes
 app.get('/api/analytics/dashboard', async (req, res) => {
