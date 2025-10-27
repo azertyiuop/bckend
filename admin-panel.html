@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel - Streaming Server</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: #0f1419;
+      color: #e8eaed;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    header {
+      background: #1a1f2e;
+      padding: 20px 30px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      border: 1px solid #2a3441;
+    }
+
+    h1 {
+      font-size: 28px;
+      color: #00b4ff;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      background: #1a1f2e;
+      padding: 20px;
+      border-radius: 8px;
+      border: 1px solid #2a3441;
+    }
+
+    .stat-card h3 {
+      color: #9ca3af;
+      font-size: 14px;
+      margin-bottom: 10px;
+      font-weight: 500;
+    }
+
+    .stat-value {
+      font-size: 32px;
+      font-weight: 700;
+      color: #00b4ff;
+    }
+
+    .section {
+      background: #1a1f2e;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      border: 1px solid #2a3441;
+    }
+
+    .section h2 {
+      margin-bottom: 15px;
+      color: #00b4ff;
+      font-size: 20px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #2a3441;
+    }
+
+    th {
+      background: #0f1419;
+      color: #9ca3af;
+      font-weight: 600;
+      font-size: 13px;
+      text-transform: uppercase;
+    }
+
+    tr:hover {
+      background: #232933;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .badge.active {
+      background: #10b981;
+      color: #fff;
+    }
+
+    .badge.banned {
+      background: #ef4444;
+      color: #fff;
+    }
+
+    .badge.muted {
+      background: #f59e0b;
+      color: #fff;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .btn-danger {
+      background: #ef4444;
+      color: #fff;
+    }
+
+    .btn-danger:hover {
+      background: #dc2626;
+    }
+
+    .btn-success {
+      background: #10b981;
+      color: #fff;
+    }
+
+    .btn-success:hover {
+      background: #059669;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #9ca3af;
+    }
+
+    .error {
+      background: #7f1d1d;
+      color: #fca5a5;
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+      border: 1px solid #991b1b;
+    }
+
+    .log-entry {
+      padding: 10px;
+      border-bottom: 1px solid #2a3441;
+      font-size: 13px;
+    }
+
+    .log-time {
+      color: #6b7280;
+      margin-right: 10px;
+    }
+
+    .log-action {
+      color: #00b4ff;
+      font-weight: 600;
+      margin-right: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Admin Panel</h1>
+    </header>
+
+    <div id="error-message"></div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <h3>Total Utilisateurs</h3>
+        <div class="stat-value" id="total-users">-</div>
+      </div>
+      <div class="stat-card">
+        <h3>Utilisateurs Actifs</h3>
+        <div class="stat-value" id="active-users">-</div>
+      </div>
+      <div class="stat-card">
+        <h3>Messages Aujourd'hui</h3>
+        <div class="stat-value" id="messages-today">-</div>
+      </div>
+      <div class="stat-card">
+        <h3>Utilisateurs Bannis</h3>
+        <div class="stat-value" id="banned-users">-</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Utilisateurs Bannis</h2>
+      <div id="banned-list" class="loading">Chargement...</div>
+    </div>
+
+    <div class="section">
+      <h2>Utilisateurs en Sourdine</h2>
+      <div id="muted-list" class="loading">Chargement...</div>
+    </div>
+
+    <div class="section">
+      <h2>Logs d'Activité (50 derniers)</h2>
+      <div id="activity-logs" class="loading">Chargement...</div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = window.location.origin.replace(':3002', '') + ':3002';
+
+    async function fetchWithAuth(url) {
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': 'Basic ' + btoa('admin:admin123')
+        }
+      });
+      if (!response.ok) throw new Error('Erreur API');
+      return response.json();
+    }
+
+    async function loadDashboard() {
+      try {
+        const stats = await fetchWithAuth(`${API_URL}/api/analytics/dashboard`);
+        if (stats.success) {
+          document.getElementById('total-users').textContent = stats.data.totalUsers || 0;
+          document.getElementById('active-users').textContent = stats.data.activeUsers || 0;
+          document.getElementById('messages-today').textContent = stats.data.messagesToday || 0;
+        }
+      } catch (error) {
+        console.error('Erreur chargement dashboard:', error);
+      }
+    }
+
+    async function loadBannedUsers() {
+      try {
+        const result = await fetchWithAuth(`${API_URL}/api/moderation/banned`);
+        const container = document.getElementById('banned-list');
+
+        if (result.success && result.users.length > 0) {
+          document.getElementById('banned-users').textContent = result.users.length;
+          container.innerHTML = `
+            <table>
+              <thead>
+                <tr>
+                  <th>Username</th>
+                  <th>IP</th>
+                  <th>Raison</th>
+                  <th>Banni le</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${result.users.map(user => `
+                  <tr>
+                    <td>${user.username || 'N/A'}</td>
+                    <td>${user.ip || 'N/A'}</td>
+                    <td>${user.reason || 'N/A'}</td>
+                    <td>${new Date(user.banned_at).toLocaleString('fr-FR')}</td>
+                    <td>
+                      <button class="btn btn-success" onclick="unban('${user.fingerprint}', '${user.ip}')">
+                        Débannir
+                      </button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `;
+        } else {
+          container.innerHTML = '<p style="color: #9ca3af;">Aucun utilisateur banni</p>';
+          document.getElementById('banned-users').textContent = '0';
+        }
+      } catch (error) {
+        console.error('Erreur chargement bannis:', error);
+        document.getElementById('banned-list').innerHTML = '<p style="color: #ef4444;">Erreur de chargement</p>';
+      }
+    }
+
+    async function loadMutedUsers() {
+      try {
+        const result = await fetchWithAuth(`${API_URL}/api/moderation/muted`);
+        const container = document.getElementById('muted-list');
+
+        if (result.success && result.users.length > 0) {
+          container.innerHTML = `
+            <table>
+              <thead>
+                <tr>
+                  <th>Username</th>
+                  <th>Raison</th>
+                  <th>Fin du mute</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${result.users.map(user => `
+                  <tr>
+                    <td>${user.username || 'N/A'}</td>
+                    <td>${user.reason || 'N/A'}</td>
+                    <td>${new Date(user.mute_end_time).toLocaleString('fr-FR')}</td>
+                    <td>
+                      <button class="btn btn-success" onclick="unmute('${user.fingerprint}')">
+                        Unmute
+                      </button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `;
+        } else {
+          container.innerHTML = '<p style="color: #9ca3af;">Aucun utilisateur en sourdine</p>';
+        }
+      } catch (error) {
+        console.error('Erreur chargement muted:', error);
+        document.getElementById('muted-list').innerHTML = '<p style="color: #ef4444;">Erreur de chargement</p>';
+      }
+    }
+
+    async function loadActivityLogs() {
+      try {
+        const result = await fetchWithAuth(`${API_URL}/api/analytics/logs?limit=50`);
+        const container = document.getElementById('activity-logs');
+
+        if (result.success && result.logs.length > 0) {
+          container.innerHTML = result.logs.map(log => `
+            <div class="log-entry">
+              <span class="log-time">${new Date(log.created_at).toLocaleString('fr-FR')}</span>
+              <span class="log-action">${log.action_type}</span>
+              ${log.username ? `<span>${log.username}</span>` : ''}
+              ${log.ip_address ? `<span style="color: #6b7280;">(${log.ip_address})</span>` : ''}
+            </div>
+          `).join('');
+        } else {
+          container.innerHTML = '<p style="color: #9ca3af;">Aucun log disponible</p>';
+        }
+      } catch (error) {
+        console.error('Erreur chargement logs:', error);
+        document.getElementById('activity-logs').innerHTML = '<p style="color: #ef4444;">Erreur de chargement</p>';
+      }
+    }
+
+    async function unban(fingerprint, ip) {
+      try {
+        const response = await fetch(`${API_URL}/api/moderation/unban`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Basic ' + btoa('admin:admin123')
+          },
+          body: JSON.stringify({ fingerprint, ip, adminUsername: 'admin' })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          alert('Utilisateur débanni avec succès');
+          loadBannedUsers();
+          loadDashboard();
+        }
+      } catch (error) {
+        alert('Erreur lors du déban');
+      }
+    }
+
+    async function unmute(fingerprint) {
+      try {
+        const response = await fetch(`${API_URL}/api/moderation/unmute`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Basic ' + btoa('admin:admin123')
+          },
+          body: JSON.stringify({ fingerprint, adminUsername: 'admin' })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          alert('Utilisateur unmute avec succès');
+          loadMutedUsers();
+        }
+      } catch (error) {
+        alert('Erreur lors du unmute');
+      }
+    }
+
+    loadDashboard();
+    loadBannedUsers();
+    loadMutedUsers();
+    loadActivityLogs();
+
+    setInterval(() => {
+      loadDashboard();
+      loadBannedUsers();
+      loadMutedUsers();
+      loadActivityLogs();
+    }, 30000);
+  </script>
+</body>
+</html>

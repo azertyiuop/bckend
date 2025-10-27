@@ -1,9 +1,14 @@
 import express from 'express';
 import cors from 'cors';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { getDatabase } from './lib/db-instance.mjs';
 import { AnalyticsAPI } from './api/analytics.mjs';
 import { ModerationAPI } from './api/moderation.mjs';
 import { AuthAPI } from './api/Auth.mjs';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
 const PORT = process.env.API_PORT || 3002;
@@ -42,58 +47,83 @@ const analyticsAPI = new AnalyticsAPI(db);
 const moderationAPI = new ModerationAPI(db);
 const authAPI = new AuthAPI(db);
 
+function basicAuth(req, res, next) {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Basic ')) {
+    res.setHeader('WWW-Authenticate', 'Basic realm="Admin Panel"');
+    return res.status(401).send('Authentication required');
+  }
+
+  const base64Credentials = authHeader.split(' ')[1];
+  const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
+  const [username, password] = credentials.split(':');
+
+  const validCredentials = {
+    'admin': 'admin123',
+    'superadmin': 'super123'
+  };
+
+  if (validCredentials[username] && validCredentials[username] === password) {
+    next();
+  } else {
+    res.setHeader('WWW-Authenticate', 'Basic realm="Admin Panel"');
+    return res.status(401).send('Invalid credentials');
+  }
+}
+
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
   const result = await authAPI.login(username, password);
   res.json(result);
 });
 
-// Analytics routes
-app.get('/api/analytics/dashboard', async (req, res) => {
+// Analytics routes (protected with Basic Auth)
+app.get('/api/analytics/dashboard', basicAuth, async (req, res) => {
   const result = await analyticsAPI.getDashboardStats();
   res.json(result);
 });
 
-app.get('/api/analytics/messages', async (req, res) => {
+app.get('/api/analytics/messages', basicAuth, async (req, res) => {
   const period = req.query.period || '7days';
   const result = await analyticsAPI.getMessageStats(period);
   res.json(result);
 });
 
-app.get('/api/analytics/activity', async (req, res) => {
+app.get('/api/analytics/activity', basicAuth, async (req, res) => {
   const result = await analyticsAPI.getUserActivityStats();
   res.json(result);
 });
 
-app.get('/api/analytics/streams', async (req, res) => {
+app.get('/api/analytics/streams', basicAuth, async (req, res) => {
   const result = await analyticsAPI.getStreamStats();
   res.json(result);
 });
 
-app.get('/api/analytics/moderation', async (req, res) => {
+app.get('/api/analytics/moderation', basicAuth, async (req, res) => {
   const result = await analyticsAPI.getModerationStats();
   res.json(result);
 });
 
-app.get('/api/analytics/logs', async (req, res) => {
+app.get('/api/analytics/logs', basicAuth, async (req, res) => {
   const limit = parseInt(req.query.limit) || 100;
   const offset = parseInt(req.query.offset) || 0;
   const result = await analyticsAPI.getActivityLogs(limit, offset);
   res.json(result);
 });
 
-// Moderation routes
-app.get('/api/moderation/banned', async (req, res) => {
+// Moderation routes (protected with Basic Auth)
+app.get('/api/moderation/banned', basicAuth, async (req, res) => {
   const result = await moderationAPI.getBannedUsers();
   res.json(result);
 });
 
-app.get('/api/moderation/muted', async (req, res) => {
+app.get('/api/moderation/muted', basicAuth, async (req, res) => {
   const result = await moderationAPI.getMutedUsers();
   res.json(result);
 });
 
-app.post('/api/moderation/ban', async (req, res) => {
+app.post('/api/moderation/ban', basicAuth, async (req, res) => {
   const { fingerprint, ip, username, reason, duration, adminUsername } = req.body;
   const result = await moderationAPI.banUser(
     fingerprint,
@@ -106,13 +136,13 @@ app.post('/api/moderation/ban', async (req, res) => {
   res.json(result);
 });
 
-app.post('/api/moderation/unban', async (req, res) => {
+app.post('/api/moderation/unban', basicAuth, async (req, res) => {
   const { fingerprint, ip, adminUsername } = req.body;
   const result = await moderationAPI.unbanUser(fingerprint, ip, adminUsername || 'admin');
   res.json(result);
 });
 
-app.post('/api/moderation/mute', async (req, res) => {
+app.post('/api/moderation/mute', basicAuth, async (req, res) => {
   const { fingerprint, username, ip, reason, duration, adminUsername } = req.body;
   const result = await moderationAPI.muteUser(
     fingerprint,
@@ -125,27 +155,31 @@ app.post('/api/moderation/mute', async (req, res) => {
   res.json(result);
 });
 
-app.post('/api/moderation/unmute', async (req, res) => {
+app.post('/api/moderation/unmute', basicAuth, async (req, res) => {
   const { fingerprint, adminUsername } = req.body;
   const result = await moderationAPI.unmuteUser(fingerprint, adminUsername || 'admin');
   res.json(result);
 });
 
-app.delete('/api/moderation/message/:id', async (req, res) => {
+app.delete('/api/moderation/message/:id', basicAuth, async (req, res) => {
   const adminUsername = req.body.adminUsername || 'admin';
   const result = await moderationAPI.deleteMessage(req.params.id, adminUsername);
   res.json(result);
 });
 
-app.get('/api/moderation/actions', async (req, res) => {
+app.get('/api/moderation/actions', basicAuth, async (req, res) => {
   const limit = parseInt(req.query.limit) || 50;
   const result = await moderationAPI.getRecentActions(limit);
   res.json(result);
 });
 
-app.post('/api/moderation/clear-mutes', async (req, res) => {
+app.post('/api/moderation/clear-mutes', basicAuth, async (req, res) => {
   const result = await moderationAPI.clearExpiredMutes();
   res.json(result);
+});
+
+app.get('/admin', basicAuth, (req, res) => {
+  res.sendFile(join(__dirname, 'admin-panel.html'));
 });
 
 app.get('/api/chat/messages', async (req, res) => {
