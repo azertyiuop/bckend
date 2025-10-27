@@ -32,10 +32,10 @@ nms.on('donePublish', (id, streamPath, args) => {
 try {
   nms.run();
   console.log('Serveur RTMP démarré');
-  console.log('URL: rtmp://localhost:1935/live');
+  console.log('Port: 1935');
   console.log('');
   console.log('Configuration OBS:');
-  console.log('  Serveur: rtmp://localhost:1935/live');
+  console.log('  Serveur: rtmp://VOTRE_DOMAINE:1935/live');
   console.log('  Clé de flux: votre_cle');
 } catch (error) {
   console.error('Erreur:', error.message);

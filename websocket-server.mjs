@@ -1018,7 +1018,7 @@ setInterval(() => {
   broadcastAdminData();
 }, 10000);
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log('🚀 [WebSocket] Serveur démarré');
   console.log(`📡 [WebSocket] Port: ${PORT}`);
   console.log('✅ Serveur prêt');

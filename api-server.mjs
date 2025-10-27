@@ -9,10 +9,10 @@ const PORT = process.env.API_PORT || 3002;
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',')
-  : ['http://localhost:5173', 'http://localhost:3000'];
+  : ['*'];
 
 app.use(cors({
-  origin: (origin, callback) => {
+  origin: allowedOrigins.includes('*') ? '*' : (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -168,8 +168,8 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Erreur interne du serveur' });
 });
 
-app.listen(PORT, () => {
-  console.log(`✅ API Server démarré sur http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ API Server démarré sur le port ${PORT}`);
 });
 
 export default app;

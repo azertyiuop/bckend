@@ -54,8 +54,7 @@ async function createAdminAccount() {
     console.log('═══════════════════════════════════════════════════════════\n');
     console.log('⚠️  IMPORTANT : Copiez ces identifiants maintenant !');
     console.log('    Le mot de passe ne sera plus affiché après.');
-    console.log('\n💡 Utilisez ces identifiants pour vous connecter sur :');
-    console.log('    http://localhost:5173\n');
+    console.log('\n💡 Utilisez ces identifiants pour vous connecter sur votre site\n');
     console.log('🔒 Une fois connecté, le panel admin apparaîtra');
     console.log('    automatiquement dans la barre de navigation.\n');
     console.log('═══════════════════════════════════════════════════════════\n');

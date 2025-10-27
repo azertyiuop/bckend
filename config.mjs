@@ -19,10 +19,10 @@ export const SERVER_CONFIG = {
   DISCORD_BOT_TOKEN: process.env.DISCORD_BOT_TOKEN || 'your_discord_bot_token_here',
   DISCORD_WEBHOOK_URL: process.env.DISCORD_WEBHOOK_URL || null,
 
-  FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:5173',
+  FRONTEND_URL: process.env.FRONTEND_URL || '*',
   ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(',')
-    : ['http://localhost:5173', 'http://localhost:3000'],
+    : ['*'],
 
   JWT_SECRET: process.env.JWT_SECRET || 'your_jwt_secret_change_in_production',
 
