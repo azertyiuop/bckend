@@ -35,31 +35,28 @@ function getLocalIP() {
 function getDatabaseInfo() {
   const dbType = SERVER_CONFIG.DB_TYPE;
   const dbUrl = SERVER_CONFIG.DATABASE_URL;
-  const supabaseUrl = process.env.VITE_SUPABASE_URL;
 
-  if (supabaseUrl) {
+  if (dbUrl) {
+    const isRailway = dbUrl.includes('railway.app');
     return {
-      type: 'Supabase PostgreSQL',
-      url: supabaseUrl,
-      icon: '🔷'
-    };
-  } else if (dbUrl) {
-    return {
-      type: 'PostgreSQL',
+      type: `PostgreSQL ${isRailway ? '(Railway)' : ''}`,
       url: maskUrl(dbUrl),
-      icon: '🐘'
+      icon: '🐘',
+      host: isRailway ? 'Railway' : 'PostgreSQL distant'
     };
   } else if (dbType === 'sqlite') {
     return {
       type: 'SQLite (local)',
       url: './data/app.db',
-      icon: '💾'
+      icon: '💾',
+      host: 'Fichier local'
     };
   } else {
     return {
       type: 'SQLite (défaut)',
       url: './data/app.db',
-      icon: '💾'
+      icon: '💾',
+      host: 'Fichier local'
     };
   }
 }
@@ -69,11 +66,13 @@ function getMemoryUsage() {
   return `${Math.round(used.heapUsed / 1024 / 1024)} MB`;
 }
 
-const localIP = getLocalIP();
 const dbInfo = getDatabaseInfo();
 const isProduction = process.env.NODE_ENV === 'production';
 const isDefaultJWT = SERVER_CONFIG.JWT_SECRET === 'your_jwt_secret_change_in_production';
 const hasDiscordWebhook = !!SERVER_CONFIG.DISCORD_WEBHOOK_URL;
+const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.RAILWAY_STATIC_URL;
+const publicDomain = railwayDomain || process.env.PUBLIC_DOMAIN;
+const baseUrl = publicDomain ? `https://${publicDomain}` : 'http://localhost';
 
 console.log('');
 console.log('╔═══════════════════════════════════════════════════════════════════╗');
@@ -94,27 +93,35 @@ console.log('');
 
 console.log('🌐 SERVEURS ET PORTS');
 console.log('─────────────────────────────────────────────────────────────────────');
-console.log(`   📡 WebSocket:         ws://${localIP}:${SERVER_CONFIG.WS_PORT}`);
-console.log(`      Local:             ws://localhost:${SERVER_CONFIG.WS_PORT}`);
-console.log('');
-console.log(`   🔧 API REST:          http://${localIP}:${SERVER_CONFIG.API_PORT}/api`);
-console.log(`      Local:             http://localhost:${SERVER_CONFIG.API_PORT}/api`);
-console.log(`      Endpoints:         /analytics, /moderation, /users`);
-console.log('');
-console.log(`   🎥 RTMP:              rtmp://${localIP}:${SERVER_CONFIG.RTMP_PORT}/live`);
-console.log(`      Local:             rtmp://localhost:${SERVER_CONFIG.RTMP_PORT}/live`);
-console.log('');
-console.log(`   🌐 HLS:               http://${localIP}:${SERVER_CONFIG.HTTP_PORT}`);
-console.log(`      Local:             http://localhost:${SERVER_CONFIG.HTTP_PORT}`);
+if (publicDomain) {
+  console.log(`   📡 WebSocket:         wss://${publicDomain}`);
+  console.log(`      Port:              ${SERVER_CONFIG.WS_PORT}`);
+  console.log('');
+  console.log(`   🔧 API REST:          ${baseUrl}/api`);
+  console.log(`      Port:              ${SERVER_CONFIG.API_PORT}`);
+  console.log(`      Endpoints:         /analytics, /moderation, /users`);
+  console.log('');
+  console.log(`   🎥 RTMP:              rtmp://${publicDomain}:${SERVER_CONFIG.RTMP_PORT}/live`);
+  console.log('');
+  console.log(`   🌐 HLS:               ${baseUrl}`);
+  console.log(`      Port:              ${SERVER_CONFIG.HTTP_PORT}`);
+} else {
+  console.log(`   📡 WebSocket:         Port ${SERVER_CONFIG.WS_PORT}`);
+  console.log('');
+  console.log(`   🔧 API REST:          Port ${SERVER_CONFIG.API_PORT}/api`);
+  console.log(`      Endpoints:         /analytics, /moderation, /users`);
+  console.log('');
+  console.log(`   🎥 RTMP:              Port ${SERVER_CONFIG.RTMP_PORT}/live`);
+  console.log('');
+  console.log(`   🌐 HLS:               Port ${SERVER_CONFIG.HTTP_PORT}`);
+}
 console.log('');
 
 console.log('💾 BASE DE DONNÉES');
 console.log('─────────────────────────────────────────────────────────────────────');
 console.log(`   ${dbInfo.icon} Type:              ${dbInfo.type}`);
-console.log(`   📍 URL:               ${dbInfo.url}`);
-if (process.env.VITE_SUPABASE_ANON_KEY) {
-  console.log(`   🔑 Anon Key:          ${process.env.VITE_SUPABASE_ANON_KEY.substring(0, 30)}...`);
-}
+console.log(`   📍 Hébergement:       ${dbInfo.host}`);
+console.log(`   🔗 URL:               ${dbInfo.url}`);
 console.log('');
 
 console.log('🔒 CONFIGURATION SÉCURITÉ');
@@ -127,16 +134,28 @@ console.log('');
 
 console.log('📺 CONFIGURATION OBS STUDIO');
 console.log('─────────────────────────────────────────────────────────────────────');
-console.log(`   Serveur RTMP:         rtmp://${localIP}:${SERVER_CONFIG.RTMP_PORT}/live`);
-console.log(`   Clé de flux:          votre_cle_de_stream`);
-console.log(`   URL de lecture HLS:   http://${localIP}:${SERVER_CONFIG.HTTP_PORT}/live/votre_cle_de_stream/index.m3u8`);
+if (publicDomain) {
+  console.log(`   Serveur RTMP:         rtmp://${publicDomain}:${SERVER_CONFIG.RTMP_PORT}/live`);
+  console.log(`   Clé de flux:          votre_cle_de_stream`);
+  console.log(`   URL de lecture HLS:   ${baseUrl}/live/votre_cle_de_stream/index.m3u8`);
+} else {
+  console.log(`   Serveur RTMP:         rtmp://[VOTRE_DOMAINE]:${SERVER_CONFIG.RTMP_PORT}/live`);
+  console.log(`   Clé de flux:          votre_cle_de_stream`);
+  console.log(`   URL de lecture HLS:   [VOTRE_DOMAINE]/live/votre_cle_de_stream/index.m3u8`);
+}
 console.log('');
 
 console.log('🔗 URLS DE TEST RAPIDE');
 console.log('─────────────────────────────────────────────────────────────────────');
-console.log(`   Dashboard Analytics:  http://localhost:${SERVER_CONFIG.API_PORT}/api/analytics/dashboard`);
-console.log(`   Stats Messages:       http://localhost:${SERVER_CONFIG.API_PORT}/api/analytics/messages`);
-console.log(`   Activité Utilisateur: http://localhost:${SERVER_CONFIG.API_PORT}/api/analytics/activity`);
+if (publicDomain) {
+  console.log(`   Dashboard Analytics:  ${baseUrl}/api/analytics/dashboard`);
+  console.log(`   Stats Messages:       ${baseUrl}/api/analytics/messages`);
+  console.log(`   Activité Utilisateur: ${baseUrl}/api/analytics/activity`);
+} else {
+  console.log(`   Dashboard Analytics:  Port ${SERVER_CONFIG.API_PORT}/api/analytics/dashboard`);
+  console.log(`   Stats Messages:       Port ${SERVER_CONFIG.API_PORT}/api/analytics/messages`);
+  console.log(`   Activité Utilisateur: Port ${SERVER_CONFIG.API_PORT}/api/analytics/activity`);
+}
 console.log('');
 
 if (isDefaultJWT || !hasDiscordWebhook) {
