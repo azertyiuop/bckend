@@ -11,21 +11,19 @@ npm install
 
 ## Configuration
 
-Créez un fichier `.env` basé sur `.env.example` :
+Créez un fichier `.env` avec l'URL de votre API Railway :
 
 ```bash
-VITE_API_URL=http://localhost:3002
+VITE_API_URL=https://your-railway-api-url.up.railway.app
 ```
 
-Pour production, utilisez l'URL de votre API Railway.
+Si vide, l'interface utilisera les routes relatives (même domaine).
 
 ## Développement
 
 ```bash
 npm run dev
 ```
-
-L'interface sera disponible sur `http://localhost:5173`
 
 ## Build
 
