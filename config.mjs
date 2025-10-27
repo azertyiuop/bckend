@@ -26,5 +26,6 @@ export const SERVER_CONFIG = {
 
   JWT_SECRET: process.env.JWT_SECRET || 'your_jwt_secret_change_in_production',
 
-  DATABASE_URL: process.env.DATABASE_URL || null
+  DATABASE_URL: process.env.DATABASE_URL || null,
+  DB_TYPE: process.env.DB_TYPE || null
 };
