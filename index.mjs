@@ -5,7 +5,7 @@ import './discord-bot.mjs';
 import { SERVER_CONFIG } from './config.mjs';
 import os from 'os';
 import { readFileSync } from 'fs';
-import '../proxy/proxyServer.mjs
+import './proxy/proxyServer.mjs
 const pkg = JSON.parse(readFileSync('./package.json', 'utf8'));
 
 function maskUrl(url) {
