@@ -116,7 +116,12 @@ client.on('interactionCreate', async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   if (interaction.commandName === 'account') {
-    await interaction.deferReply({ flags: 64 }); // 64 = EPHEMERAL flag
+    try {
+      await interaction.deferReply({ ephemeral: true });
+    } catch (error) {
+      console.error('Erreur defer reply:', error);
+      return;
+    }
 
     const result = await createTemporaryAccount(
       interaction.user.id,
@@ -124,13 +129,17 @@ client.on('interactionCreate', async (interaction) => {
     );
 
     if (!result.success) {
-      const errorEmbed = new EmbedBuilder()
-        .setColor('#FF4444')
-        .setTitle('❌ Compte Existant')
-        .setDescription(result.message)
-        .setTimestamp();
+      try {
+        const errorEmbed = new EmbedBuilder()
+          .setColor('#FF4444')
+          .setTitle('❌ Compte Existant')
+          .setDescription(result.message)
+          .setTimestamp();
 
-      await interaction.editReply({ embeds: [errorEmbed] });
+        await interaction.editReply({ embeds: [errorEmbed] });
+      } catch (error) {
+        console.error('Erreur envoi réponse erreur:', error);
+      }
       return;
     }
 
@@ -150,33 +159,41 @@ client.on('interactionCreate', async (interaction) => {
     try {
       await interaction.user.send({ embeds: [dmEmbed] });
 
-      const confirmEmbed = new EmbedBuilder()
-        .setColor('#00FF00')
-        .setTitle('✅ Compte Créé')
-        .setDescription('Tes identifiants ont été envoyés en **message privé** !')
-        .addFields(
-          { name: 'ℹ️ Note', value: 'Vérifie tes DMs. Si tu ne reçois rien, active les messages privés.' }
-        )
-        .setTimestamp();
+      try {
+        const confirmEmbed = new EmbedBuilder()
+          .setColor('#00FF00')
+          .setTitle('✅ Compte Créé')
+          .setDescription('Tes identifiants ont été envoyés en **message privé** !')
+          .addFields(
+            { name: 'ℹ️ Note', value: 'Vérifie tes DMs. Si tu ne reçois rien, active les messages privés.' }
+          )
+          .setTimestamp();
 
-      await interaction.editReply({ embeds: [confirmEmbed] });
+        await interaction.editReply({ embeds: [confirmEmbed] });
+      } catch (replyError) {
+        console.error('Erreur editReply après DM:', replyError);
+      }
 
     } catch (error) {
       console.error('Erreur envoi DM:', error);
 
-      const fallbackEmbed = new EmbedBuilder()
-        .setColor('#FF9900')
-        .setTitle('⚠️ Impossible d\'envoyer en DM')
-        .setDescription('**Tes identifiants :**')
-        .addFields(
-          { name: '👤 Username', value: `\`${result.username}\``, inline: true },
-          { name: '🔑 Password', value: `\`${result.password}\``, inline: true },
-          { name: '⏰ Expire le', value: `<t:${Math.floor(result.expiresAt.getTime() / 1000)}:F>`, inline: false }
-        )
-        .setFooter({ text: '⚠️ Supprime ce message après avoir noté tes identifiants !' })
-        .setTimestamp();
+      try {
+        const fallbackEmbed = new EmbedBuilder()
+          .setColor('#FF9900')
+          .setTitle('⚠️ Impossible d\'envoyer en DM')
+          .setDescription('**Tes identifiants :**')
+          .addFields(
+            { name: '👤 Username', value: `\`${result.username}\``, inline: true },
+            { name: '🔑 Password', value: `\`${result.password}\``, inline: true },
+            { name: '⏰ Expire le', value: `<t:${Math.floor(result.expiresAt.getTime() / 1000)}:F>`, inline: false }
+          )
+          .setFooter({ text: '⚠️ Supprime ce message après avoir noté tes identifiants !' })
+          .setTimestamp();
 
-      await interaction.editReply({ embeds: [fallbackEmbed] });
+        await interaction.editReply({ embeds: [fallbackEmbed] });
+      } catch (replyError) {
+        console.error('Erreur editReply fallback:', replyError);
+      }
     }
   }
 });
