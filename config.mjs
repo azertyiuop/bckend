@@ -1,5 +1,5 @@
 export const SERVER_CONFIG = {
-  ENCRYPTION_KEY: process.env.ENCRYPTION_KEY || 'BOLT_ANONYMOUS_2025',
+  ENCRYPTION_KEY: process.env.ENCRYPTION_KEY || 'ovgTa(yajGPtvzB7y[#nL}CkO`Z8afl&',
 
   ADMIN_ACCESS_CODES: process.env.ADMIN_ACCESS_CODES
     ? process.env.ADMIN_ACCESS_CODES.split(',')
