@@ -19,8 +19,15 @@ const streamChatHistory = new Map();
 const globalChatHistory = [];
 const globalConnectedUsers = new Set();
 
+function getRealIP(req) {
+  return req.headers['x-forwarded-for']?.split(',')[0].trim() ||
+         req.headers['x-real-ip'] ||
+         req.socket.remoteAddress ||
+         'unknown';
+}
+
 function generateFingerprint(req) {
-  const ip = req.socket.remoteAddress || 'unknown';
+  const ip = getRealIP(req);
   const ua = req.headers['user-agent'] || 'unknown';
   return crypto.createHash('sha256').update(ip + ua).digest('hex').substring(0, 16);
 }
@@ -153,7 +160,7 @@ async function broadcastAdminData() {
 wss.on('connection', async (ws, req) => {
   const clientId = generateUserId();
   const fingerprint = generateFingerprint(req);
-  const ip = req.socket.remoteAddress || 'unknown';
+  const ip = getRealIP(req);
   const userAgent = req.headers['user-agent'] || 'unknown';
   const { browser, os, deviceType } = parseUserAgent(userAgent);
 

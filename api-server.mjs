@@ -12,6 +12,16 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',')
   : ['*'];
 
+app.set('trust proxy', true);
+
+function getRealIP(req) {
+  return req.headers['x-forwarded-for']?.split(',')[0].trim() ||
+         req.headers['x-real-ip'] ||
+         req.ip ||
+         req.socket?.remoteAddress ||
+         'unknown';
+}
+
 app.use(cors({
   origin: allowedOrigins.includes('*') ? '*' : (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) {
