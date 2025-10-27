@@ -14,7 +14,7 @@
     }
   },
   "deploy": {
-    "startCommand": "node index.mjs",
+    "startCommand": "node migrate-to-postgres.mjs",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }
