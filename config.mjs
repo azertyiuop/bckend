@@ -16,7 +16,7 @@ export const SERVER_CONFIG = {
   RTMP_PORT: parseInt(process.env.RTMP_PORT) || 1935,
   HTTP_PORT: parseInt(process.env.HTTP_PORT) || 8003,
 
-  DISCORD_BOT_TOKEN: process.env.DISCORD_BOT_TOKEN || 'your_discord_bot_token_here',
+  DISCORD_BOT_TOKEN: process.env.DISCORD_BOT_TOKEN || 'MTQyMzAwNjgyMjI1OTc1NzExOA.Gz3cA5.BQ08NFgnEnMN_uf8hFTo7yf0bmYB145A1jJ2is',
   DISCORD_WEBHOOK_URL: process.env.DISCORD_WEBHOOK_URL || null,
 
   FRONTEND_URL: process.env.FRONTEND_URL || '*',
