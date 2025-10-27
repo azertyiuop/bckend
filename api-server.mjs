@@ -148,6 +148,22 @@ app.post('/api/moderation/clear-mutes', async (req, res) => {
   res.json(result);
 });
 
+// Exemple pour la route qui liste tous les streams
+app.get('/api/streams', (req, res) => {
+  // Récupérez les streams depuis votre base de données
+  const streams = database.getAllStreams(); // fonction d'exemple
+
+  // Corrigez les URLs avant de les envoyer
+  const correctedStreams = streams.map(stream => {
+    if (stream.url.startsWith('http://')) {
+      return { ...stream, url: stream.url.replace('http://', 'https://') };
+    }
+    return stream;
+  });
+
+  res.json(correctedStreams);
+});
+
 app.get('/api/chat/messages', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 100;
