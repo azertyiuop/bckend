@@ -42,6 +42,10 @@ const analyticsAPI = new AnalyticsAPI(db);
 const moderationAPI = new ModerationAPI(db);
 const authAPI = new AuthAPI(db);
 
+
+app.get('/api/streams', async (req, res) => {
+  try {
+
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
   const result = await authAPI.login(username, password);
@@ -82,6 +86,8 @@ app.get('/api/analytics/logs', async (req, res) => {
   res.json(result);
 });
 
+
+
 // Moderation routes
 app.get('/api/moderation/banned', async (req, res) => {
   const result = await moderationAPI.getBannedUsers();
@@ -116,6 +122,7 @@ app.post('/api/moderation/mute', async (req, res) => {
   const { fingerprint, username, ip, reason, duration, adminUsername } = req.body;
   const result = await moderationAPI.muteUser(
     fingerprint,
+    
     username,
     ip,
     reason,
@@ -180,6 +187,22 @@ app.get('/api/chat/messages', async (req, res) => {
 
     sql += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?';
     params.push(limit, offset);
+
+    const streams = await db.all('SELECT * FROM streams ORDER BY created_at DESC');
+
+    const correctedStreams = streams.map(stream => {
+      if (stream.url && stream.url.startsWith('http://')) {
+        return { ...stream, url: stream.url.replace('http://', 'https://') };
+      }
+      return stream;
+    });
+
+    res.json({ success: true, streams: correctedStreams });
+  } catch (error) {
+    console.error('Erreur lors de la récupération des flux:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
     const messages = await db.all(sql, params);
     res.json({ success: true, messages });
