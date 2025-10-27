@@ -35,8 +35,12 @@ function generateRandomPassword(length = 12) {
 
 async function createTemporaryAccount(discordUserId, discordUsername) {
   try {
+    const dbType = SERVER_CONFIG.DATABASE_URL ? 'postgres' : 'sqlite';
+    const nowFunction = dbType === 'postgres' ? 'CURRENT_TIMESTAMP' : "datetime('now')";
+    const placeholder = dbType === 'postgres' ? '$1' : '?';
+
     const existingAccount = await db.get(
-      `SELECT * FROM users WHERE discord_id = ? AND expires_at > datetime('now')`,
+      `SELECT * FROM users WHERE discord_id = ${placeholder} AND expires_at > ${nowFunction}`,
       [discordUserId]
     );
 
@@ -57,10 +61,14 @@ async function createTemporaryAccount(discordUserId, discordUsername) {
     const userId = randomBytes(16).toString('hex');
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
+    const placeholders = dbType === 'postgres'
+      ? '($1, $2, $3, $4, $5, $6, $7, $8)'
+      : '(?, ?, ?, ?, ?, ?, ?, ?)';
+
     await db.run(
       `INSERT INTO users (id, username, password_hash, role, discord_id, discord_username, expires_at, is_active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [userId, username, passwordHash, 'viewer', discordUserId, discordUsername, expiresAt.toISOString(), 1]
+       VALUES ${placeholders}`,
+      [userId, username, passwordHash, 'viewer', discordUserId, discordUsername, expiresAt.toISOString(), dbType === 'postgres' ? true : 1]
     );
 
     await db.addActivityLog({
@@ -175,12 +183,17 @@ client.on('interactionCreate', async (interaction) => {
 
 async function cleanupExpiredAccounts() {
   try {
+    const dbType = SERVER_CONFIG.DATABASE_URL ? 'postgres' : 'sqlite';
+    const nowFunction = dbType === 'postgres' ? 'CURRENT_TIMESTAMP' : "datetime('now')";
+    const isActiveValue = dbType === 'postgres' ? 'true' : '1';
+    const placeholder = dbType === 'postgres' ? '$1' : '?';
+
     const expiredAccounts = await db.all(
-      `SELECT * FROM users WHERE expires_at IS NOT NULL AND expires_at <= datetime('now') AND is_active = 1`
+      `SELECT * FROM users WHERE expires_at IS NOT NULL AND expires_at <= ${nowFunction} AND is_active = ${isActiveValue}`
     );
 
     for (const account of expiredAccounts) {
-      await db.run('DELETE FROM users WHERE id = ?', [account.id]);
+      await db.run(`DELETE FROM users WHERE id = ${placeholder}`, [account.id]);
 
       await db.addActivityLog({
         action_type: 'ACCOUNT_EXPIRED',
