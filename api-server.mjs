@@ -69,11 +69,29 @@ app.post('/api/streams', async (req, res) => {
   }
 });
 
-// Route pour lister tous les flux (Corrigée)
+// Route pour lister tous les flux (avec génération automatique de l'URL proxy)
 app.get('/api/streams', async (req, res) => {
   try {
+    // 1. Récupère les flux avec leurs URLs originales depuis la BDD
     const streams = await db.all('SELECT * FROM streams ORDER BY created_at DESC');
-    res.json({ success: true, streams });
+
+    // 2. Construit l'URL de base de votre propre backend
+    const protocol = req.protocol; // 'https'
+    const host = req.get('host');   // 'mon-backend.railway.app'
+    const proxyBaseUrl = `${protocol}://${host}`;
+
+    // 3. Transforme chaque flux pour remplacer son URL par une URL de proxy
+    const transformedStreams = streams.map(stream => {
+      const originalUrl = stream.url; // ex: "http://194.62.214.70/..."
+      const proxyUrl = `${proxyBaseUrl}/api/proxy-stream?url=${encodeURIComponent(originalUrl)}`;
+      
+      // Retourne un nouvel objet avec l'URL du proxy
+      return { ...stream, url: proxyUrl };
+    });
+
+    // 4. Envoie la liste des flux avec les URLs de proxy au frontend
+    res.json({ success: true, streams: transformedStreams });
+
   } catch (error) {
     console.error('Erreur lors de la récupération des flux:', error);
     res.status(500).json({ success: false, error: error.message });
