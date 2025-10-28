@@ -118,6 +118,9 @@ if (publicDomain) {
   console.log(`   🌐 HLS:               Port ${SERVER_CONFIG.HTTP_PORT}`);
 }
 console.log('');
+// Ajout : indication du statut du proxy (utilise le même port API)
+console.log(`   🔁 Proxy:              ${SERVER_CONFIG.API_PORT ? `Démarré sur le port ${SERVER_CONFIG.API_PORT}` : 'Non démarré'}`);
+console.log('');
 
 console.log('💾 BASE DE DONNÉES');
 console.log('─────────────────────────────────────────────────────────────────────');
