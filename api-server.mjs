@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import axios from 'axios'; // <--  : Indispensable pour le proxy
 import { getDatabase } from './lib/db-instance.mjs';
 import { AnalyticsAPI } from './api/analytics.mjs';
 import { ModerationAPI } from './api/moderation.mjs';
@@ -42,17 +43,76 @@ const analyticsAPI = new AnalyticsAPI(db);
 const moderationAPI = new ModerationAPI(db);
 const authAPI = new AuthAPI(db);
 
-
-app.get('/api/streams', async (req, res) => {
-  try {
-
+// --- ROUTES D'AUTHENTIFICATION ---
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
   const result = await authAPI.login(username, password);
   res.json(result);
 });
 
-// Analytics routes
+// --- ROUTES DES STREAMS (Corrigées et Complètes) ---
+
+// Route pour créer un nouveau flux (si vous en avez besoin plus tard)
+app.post('/api/streams', async (req, res) => {
+  try {
+    const { name, url } = req.body;
+    if (!name || !url) {
+      return res.status(400).json({ success: false, error: 'Le nom et l\'URL du flux sont requis.' });
+    }
+    const stmt = await db.prepare('INSERT INTO streams (name, url, created_at) VALUES (?, ?, datetime("now"))');
+    await stmt.run(name, url);
+    await stmt.finalize();
+    res.json({ success: true, stream: { name, url } });
+  } catch (error) {
+    console.error('Erreur lors de la création du flux:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Route pour lister tous les flux (Corrigée)
+app.get('/api/streams', async (req, res) => {
+  try {
+    const streams = await db.all('SELECT * FROM streams ORDER BY created_at DESC');
+    res.json({ success: true, streams });
+  } catch (error) {
+    console.error('Erreur lors de la récupération des flux:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// --- NOUVELLE ROUTE PROXY (La solution à votre problème) ---
+app.get('/api/proxy-stream', async (req, res) => {
+  const targetUrl = req.query.url;
+
+  if (!targetUrl) {
+    return res.status(400).send('Le paramètre "url" est requis.');
+  }
+
+  try {
+    if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+      return res.status(400).send('URL invalide.');
+    }
+
+    const response = await axios({
+      method: 'get',
+      url: targetUrl,
+      responseType: 'stream',
+    });
+
+    res.setHeader('Content-Type', response.headers['content-type']);
+    response.data.pipe(res);
+
+  } catch (error) {
+    console.error('Erreur de proxy:', error.message);
+    if (error.response) {
+      res.status(error.response.status).send(`Erreur distante : ${error.response.statusText}`);
+    } else {
+      res.status(500).send('Erreur interne du serveur proxy.');
+    }
+  }
+});
+
+// --- ROUTES D'ANALYTICS ---
 app.get('/api/analytics/dashboard', async (req, res) => {
   const result = await analyticsAPI.getDashboardStats();
   res.json(result);
@@ -86,9 +146,7 @@ app.get('/api/analytics/logs', async (req, res) => {
   res.json(result);
 });
 
-
-
-// Moderation routes
+// --- ROUTES DE MODÉRATION ---
 app.get('/api/moderation/banned', async (req, res) => {
   const result = await moderationAPI.getBannedUsers();
   res.json(result);
@@ -101,14 +159,7 @@ app.get('/api/moderation/muted', async (req, res) => {
 
 app.post('/api/moderation/ban', async (req, res) => {
   const { fingerprint, ip, username, reason, duration, adminUsername } = req.body;
-  const result = await moderationAPI.banUser(
-    fingerprint,
-    ip,
-    username,
-    reason,
-    duration,
-    adminUsername || 'admin'
-  );
+  const result = await moderationAPI.banUser(fingerprint, ip, username, reason, duration, adminUsername || 'admin');
   res.json(result);
 });
 
@@ -120,15 +171,7 @@ app.post('/api/moderation/unban', async (req, res) => {
 
 app.post('/api/moderation/mute', async (req, res) => {
   const { fingerprint, username, ip, reason, duration, adminUsername } = req.body;
-  const result = await moderationAPI.muteUser(
-    fingerprint,
-    
-    username,
-    ip,
-    reason,
-    duration,
-    adminUsername || 'admin'
-  );
+  const result = await moderationAPI.muteUser(fingerprint, username, ip, reason, duration, adminUsername || 'admin');
   res.json(result);
 });
 
@@ -155,22 +198,7 @@ app.post('/api/moderation/clear-mutes', async (req, res) => {
   res.json(result);
 });
 
-// Exemple pour la route qui liste tous les streams
-app.get('/api/streams', (req, res) => {
-  // Récupérez les streams depuis votre base de données
-  const streams = database.getAllStreams(); // fonction d'exemple
-
-  // Corrigez les URLs avant de les envoyer
-  const correctedStreams = streams.map(stream => {
-    if (stream.url.startsWith('http://')) {
-      return { ...stream, url: stream.url.replace('http://', 'https://') };
-    }
-    return stream;
-  });
-
-  res.json(correctedStreams);
-});
-
+// --- ROUTES DU CHAT ---
 app.get('/api/chat/messages', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 100;
@@ -188,22 +216,6 @@ app.get('/api/chat/messages', async (req, res) => {
     sql += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?';
     params.push(limit, offset);
 
-    const streams = await db.all('SELECT * FROM streams ORDER BY created_at DESC');
-
-    const correctedStreams = streams.map(stream => {
-      if (stream.url && stream.url.startsWith('http://')) {
-        return { ...stream, url: stream.url.replace('http://', 'https://') };
-      }
-      return stream;
-    });
-
-    res.json({ success: true, streams: correctedStreams });
-  } catch (error) {
-    console.error('Erreur lors de la récupération des flux:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
     const messages = await db.all(sql, params);
     res.json({ success: true, messages });
   } catch (error) {
@@ -220,11 +232,13 @@ app.get('/api/connected-users', async (req, res) => {
   }
 });
 
+// --- GESTION DES ERREURS ---
 app.use((err, req, res, next) => {
   console.error('Erreur serveur:', err);
   res.status(500).json({ error: 'Erreur interne du serveur' });
 });
 
+// --- DÉMARRAGE DU SERVEUR ---
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ API Server démarré sur le port ${PORT}`);
 });
