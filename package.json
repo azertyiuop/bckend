@@ -20,7 +20,7 @@
     "node-media-server": "^2.6.3",
     "pg": "^8.16.3",
     "sqlite3": "^5.1.6",
-    "node-fetch": "latest",
+    "node-fetch": "^2.7.0",
     "ws": "^8.14.2"
   }
 }
