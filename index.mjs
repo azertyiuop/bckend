@@ -3,6 +3,7 @@ import './rtmp.mjs';
 import './api-server.mjs';
 import './discord-bot.mjs';
 import './proxy/proxyServer.mjs';
+import proxyRoutes from './proxy.js';
 import { SERVER_CONFIG } from './config.mjs';
 import os from 'os';
 import { readFileSync } from 'fs';
