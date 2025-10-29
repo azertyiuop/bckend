@@ -1,187 +1,264 @@
-import './websocket-server.mjs';
-import './rtmp.mjs';
-import './api-server.mjs';
-import './discord-bot.mjs';
-import './proxy/proxyServer.mjs';
-import proxyRoutes from './proxy.js';
-import { SERVER_CONFIG } from './config.mjs';
-import os from 'os';
-import { readFileSync } from 'fs';
+import express from 'express';
+import cors from 'cors';
+import axios from 'axios'; // <-- LIGNE 1 : Indispensable pour le proxy (DÉJÀ PRÉSENTE)
+import { getDatabase } from './lib/db-instance.mjs';
+import { AnalyticsAPI } from './api/analytics.mjs';
+import { ModerationAPI } from './api/moderation.mjs';
+import { AuthAPI } from './api/Auth.mjs';
 
-const pkg = JSON.parse(readFileSync('./package.json', 'utf8'));
+const app = express();
+const PORT = process.env.API_PORT || 3002;
 
-function maskUrl(url) {
-  if (!url) return 'Non configurée';
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : ['*'];
+
+app.set('trust proxy', true);
+
+function getRealIP(req) {
+  return req.headers['x-forwarded-for']?.split(',')[0].trim() ||
+         req.headers['x-real-ip'] ||
+         req.ip ||
+         req.socket?.remoteAddress ||
+         'unknown';
+}
+
+app.use(cors({
+  origin: allowedOrigins.includes('*') ? '*' : (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+app.use(express.json());
+
+const db = getDatabase();
+const analyticsAPI = new AnalyticsAPI(db);
+const moderationAPI = new ModerationAPI(db);
+const authAPI = new AuthAPI(db);
+
+// --- ROUTES D'AUTHENTIFICATION ---
+app.post('/api/auth/login', async (req, res) => {
+  const { username, password } = req.body;
+  const result = await authAPI.login(username, password);
+  res.json(result);
+});
+
+// --- ROUTES DES STREAMS (Corrigées et Complètes) ---
+
+// Route pour créer un nouveau flux (si vous en avez besoin plus tard)
+app.post('/api/streams', async (req, res) => {
   try {
-    const urlObj = new URL(url);
-    if (urlObj.password) {
-      urlObj.password = '****';
+    const { name, url } = req.body;
+    if (!name || !url) {
+      return res.status(400).json({ success: false, error: 'Le nom et l\'URL du flux sont requis.' });
     }
-    return urlObj.toString();
-  } catch {
-    return url.substring(0, 20) + '****';
+    const stmt = await db.prepare('INSERT INTO streams (name, url, created_at) VALUES (?, ?, datetime("now"))');
+    await stmt.run(name, url);
+    await stmt.finalize();
+    res.json({ success: true, stream: { name, url } });
+  } catch (error) {
+    console.error('Erreur lors de la création du flux:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
-}
+});
 
-function getLocalIP() {
-  const interfaces = os.networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    for (const iface of interfaces[name]) {
-      if (iface.family === 'IPv4' && !iface.internal) {
-        return iface.address;
-      }
+// Route pour lister tous les flux (avec génération automatique de l'URL proxy)
+app.get('/api/streams', async (req, res) => {
+  try {
+    // 1. Récupère les flux avec leurs URLs originales depuis la BDD
+    const streams = await db.all('SELECT * FROM streams ORDER BY created_at DESC');
+
+    // 2. Construit l'URL de base de votre propre backend
+    const protocol = req.protocol; // 'https'
+    const host = req.get('host');   // 'mon-backend.railway.app'
+    const proxyBaseUrl = `${protocol}://${host}`;
+
+    // 3. Transforme chaque flux pour remplacer son URL par une URL de proxy
+    const transformedStreams = streams.map(stream => {
+      const originalUrl = stream.url; // ex: "http://194.62.214.70/..."
+      const proxyUrl = `${proxyBaseUrl}/api/proxy-stream?url=${encodeURIComponent(originalUrl)}`; // <-- PARTIE IMPORTANTE (DÉJÀ PRÉSENTE)
+      
+      // Retourne un nouvel objet avec l'URL du proxy
+      return { ...stream, url: proxyUrl };
+    });
+
+    // 4. Envoie la liste des flux avec les URLs de proxy au frontend
+    res.json({ success: true, streams: transformedStreams });
+
+  } catch (error) {
+    console.error('Erreur lors de la récupération des flux:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// --- NOUVELLE ROUTE PROXY (La solution à votre problème) ---
+app.get('/api/proxy-stream', async (req, res) => { // <-- LIGNE 2 : La route du proxy (DÉJÀ PRÉSENTE)
+  const targetUrl = req.query.url;
+
+  if (!targetUrl) {
+    return res.status(400).send('Le paramètre "url" est requis.');
+  }
+
+  try {
+    if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+      return res.status(400).send('URL invalide.');
+    }
+
+    const response = await axios({
+      method: 'get',
+      url: targetUrl,
+      responseType: 'stream',
+    });
+
+    res.setHeader('Content-Type', response.headers['content-type']);
+    response.data.pipe(res);
+
+  } catch (error) {
+    console.error('Erreur de proxy:', error.message);
+    if (error.response) {
+      res.status(error.response.status).send(`Erreur distante : ${error.response.statusText}`);
+    } else {
+      res.status(500).send('Erreur interne du serveur proxy.');
     }
   }
-  return 'localhost';
-}
+});
 
-function getDatabaseInfo() {
-  const dbType = SERVER_CONFIG.DB_TYPE;
-  const dbUrl = SERVER_CONFIG.DATABASE_URL;
+// --- ROUTES D'ANALYTICS ---
+app.get('/api/analytics/dashboard', async (req, res) => {
+  const result = await analyticsAPI.getDashboardStats();
+  res.json(result);
+});
 
-  if (dbUrl) {
-    const isRailway = dbUrl.includes('railway.app');
-    return {
-      type: `PostgreSQL ${isRailway ? '(Railway)' : ''}`,
-      url: maskUrl(dbUrl),
-      icon: '🐘',
-      host: isRailway ? 'Railway' : 'PostgreSQL distant'
-    };
-  } else if (dbType === 'sqlite') {
-    return {
-      type: 'SQLite (local)',
-      url: './data/app.db',
-      icon: '💾',
-      host: 'Fichier local'
-    };
-  } else {
-    return {
-      type: 'SQLite (défaut)',
-      url: './data/app.db',
-      icon: '💾',
-      host: 'Fichier local'
-    };
+app.get('/api/analytics/messages', async (req, res) => {
+  const period = req.query.period || '7days';
+  const result = await analyticsAPI.getMessageStats(period);
+  res.json(result);
+});
+
+app.get('/api/analytics/activity', async (req, res) => {
+  const result = await analyticsAPI.getUserActivityStats();
+  res.json(result);
+});
+
+app.get('/api/analytics/streams', async (req, res) => {
+  const result = await analyticsAPI.getStreamStats();
+  res.json(result);
+});
+
+app.get('/api/analytics/moderation', async (req, res) => {
+  const result = await analyticsAPI.getModerationStats();
+  res.json(result);
+});
+
+app.get('/api/analytics/logs', async (req, res) => {
+  const limit = parseInt(req.query.limit) || 100;
+  const offset = parseInt(req.query.offset) || 0;
+  const result = await analyticsAPI.getActivityLogs(limit, offset);
+  res.json(result);
+});
+
+// --- ROUTES DE MODÉRATION ---
+app.get('/api/moderation/banned', async (req, res) => {
+  const result = await moderationAPI.getBannedUsers();
+  res.json(result);
+});
+
+app.get('/api/moderation/muted', async (req, res) => {
+  const result = await moderationAPI.getMutedUsers();
+  res.json(result);
+});
+
+app.post('/api/moderation/ban', async (req, res) => {
+  const { fingerprint, ip, username, reason, duration, adminUsername } = req.body;
+  const result = await moderationAPI.banUser(fingerprint, ip, username, reason, duration, adminUsername || 'admin');
+  res.json(result);
+});
+
+app.post('/api/moderation/unban', async (req, res) => {
+  const { fingerprint, ip, adminUsername } = req.body;
+  const result = await moderationAPI.unbanUser(fingerprint, ip, adminUsername || 'admin');
+  res.json(result);
+});
+
+app.post('/api/moderation/mute', async (req, res) => {
+  const { fingerprint, username, ip, reason, duration, adminUsername } = req.body;
+  const result = await moderationAPI.muteUser(fingerprint, username, ip, reason, duration, adminUsername || 'admin');
+  res.json(result);
+});
+
+app.post('/api/moderation/unmute', async (req, res) => {
+  const { fingerprint, adminUsername } = req.body;
+  const result = await moderationAPI.unmuteUser(fingerprint, adminUsername || 'admin');
+  res.json(result);
+});
+
+app.delete('/api/moderation/message/:id', async (req, res) => {
+  const adminUsername = req.body.adminUsername || 'admin';
+  const result = await moderationAPI.deleteMessage(req.params.id, adminUsername);
+  res.json(result);
+});
+
+app.get('/api/moderation/actions', async (req, res) => {
+  const limit = parseInt(req.query.limit) || 50;
+  const result = await moderationAPI.getRecentActions(limit);
+  res.json(result);
+});
+
+app.post('/api/moderation/clear-mutes', async (req, res) => {
+  const result = await moderationAPI.clearExpiredMutes();
+  res.json(result);
+});
+
+// --- ROUTES DU CHAT ---
+app.get('/api/chat/messages', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+    const offset = parseInt(req.query.offset) || 0;
+    const streamKey = req.query.streamKey || null;
+
+    let sql = 'SELECT * FROM chat_messages';
+    const params = [];
+
+    if (streamKey) {
+      sql += ' WHERE stream_key = ?';
+      params.push(streamKey);
+    }
+
+    sql += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?';
+    params.push(limit, offset);
+
+    const messages = await db.all(sql, params);
+    res.json({ success: true, messages });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
   }
-}
+});
 
-function getMemoryUsage() {
-  const used = process.memoryUsage();
-  return `${Math.round(used.heapUsed / 1024 / 1024)} MB`;
-}
-
-const dbInfo = getDatabaseInfo();
-const isProduction = process.env.NODE_ENV === 'production';
-const isDefaultJWT = SERVER_CONFIG.JWT_SECRET === 'your_jwt_secret_change_in_production';
-const hasDiscordWebhook = !!SERVER_CONFIG.DISCORD_WEBHOOK_URL;
-const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.RAILWAY_STATIC_URL;
-const publicDomain = railwayDomain || process.env.PUBLIC_DOMAIN;
-const baseUrl = publicDomain ? `https://${publicDomain}` : 'http://localhost';
-
-console.log('');
-console.log('╔═══════════════════════════════════════════════════════════════════╗');
-console.log('║                                                                   ║');
-console.log('║         🚀  ABD STREAM SERVER - SERVEUR DÉMARRÉ                   ║');
-console.log('║                                                                   ║');
-console.log('╚═══════════════════════════════════════════════════════════════════╝');
-console.log('');
-
-console.log('📋 INFORMATIONS GÉNÉRALES');
-console.log('─────────────────────────────────────────────────────────────────────');
-console.log(`   Version:              ${pkg.version}`);
-console.log(`   Node.js:              ${process.version}`);
-console.log(`   Plateforme:           ${os.platform()} ${os.arch()}`);
-console.log(`   Mémoire:              ${getMemoryUsage()}`);
-console.log(`   Environnement:        ${isProduction ? 'PRODUCTION' : 'DÉVELOPPEMENT'}`);
-console.log('');
-
-console.log('🌐 SERVEURS ET PORTS');
-console.log('─────────────────────────────────────────────────────────────────────');
-if (publicDomain) {
-  console.log(`   📡 WebSocket:         wss://${publicDomain}`);
-  console.log(`      Port:              ${SERVER_CONFIG.WS_PORT}`);
-  console.log('');
-  console.log(`   🔧 API REST:          ${baseUrl}/api`);
-  console.log(`      Port:              ${SERVER_CONFIG.API_PORT}`);
-  console.log(`      Endpoints:         /analytics, /moderation, /users`);
-  console.log('');
-  console.log(`   🎥 RTMP:              rtmp://${publicDomain}:${SERVER_CONFIG.RTMP_PORT}/live`);
-  console.log('');
-  console.log(`   🌐 HLS:               ${baseUrl}`);
-  console.log(`      Port:              ${SERVER_CONFIG.HTTP_PORT}`);
-} else {
-  console.log(`   📡 WebSocket:         Port ${SERVER_CONFIG.WS_PORT}`);
-  console.log('');
-  console.log(`   🔧 API REST:          Port ${SERVER_CONFIG.API_PORT}/api`);
-  console.log(`      Endpoints:         /analytics, /moderation, /users`);
-  console.log('');
-  console.log(`   🎥 RTMP:              Port ${SERVER_CONFIG.RTMP_PORT}/live`);
-  console.log('');
-  console.log(`   🌐 HLS:               Port ${SERVER_CONFIG.HTTP_PORT}`);
-}
-console.log('');
-// Ajout : indication du statut du proxy (utilise le même port API)
-console.log(`   🔁 Proxy:              ${SERVER_CONFIG.API_PORT ? `Démarré sur le port ${SERVER_CONFIG.API_PORT}` : 'Non démarré'}`);
-console.log('');
-
-console.log('💾 BASE DE DONNÉES');
-console.log('─────────────────────────────────────────────────────────────────────');
-console.log(`   ${dbInfo.icon} Type:              ${dbInfo.type}`);
-console.log(`   📍 Hébergement:       ${dbInfo.host}`);
-console.log(`   🔗 URL:               ${dbInfo.url}`);
-console.log('');
-
-console.log('🔒 CONFIGURATION SÉCURITÉ');
-console.log('─────────────────────────────────────────────────────────────────────');
-console.log(`   CORS Origins:         ${SERVER_CONFIG.ALLOWED_ORIGINS.join(', ')}`);
-console.log(`   Admin Codes:          ${SERVER_CONFIG.ADMIN_ACCESS_CODES.length} code(s) configuré(s)`);
-console.log(`   JWT Secret:           ${isDefaultJWT ? '⚠️  DÉFAUT (à changer!)' : '✅ Personnalisé'}`);
-console.log(`   Discord Webhook:      ${hasDiscordWebhook ? '✅ Configuré' : '❌ Non configuré'}`);
-console.log(`   Discord Bot:          ${SERVER_CONFIG.DISCORD_BOT_TOKEN ? '✅ Configuré' : '❌ Non configuré'}`);
-console.log('');
-
-console.log('📺 CONFIGURATION OBS STUDIO');
-console.log('─────────────────────────────────────────────────────────────────────');
-if (publicDomain) {
-  console.log(`   Serveur RTMP:         rtmp://${publicDomain}:${SERVER_CONFIG.RTMP_PORT}/live`);
-  console.log(`   Clé de flux:          votre_cle_de_stream`);
-  console.log(`   URL de lecture HLS:   ${baseUrl}/live/votre_cle_de_stream/index.m3u8`);
-} else {
-  console.log(`   Serveur RTMP:         rtmp://[VOTRE_DOMAINE]:${SERVER_CONFIG.RTMP_PORT}/live`);
-  console.log(`   Clé de flux:          votre_cle_de_stream`);
-  console.log(`   URL de lecture HLS:   [VOTRE_DOMAINE]/live/votre_cle_de_stream/index.m3u8`);
-}
-console.log('');
-
-console.log('🔗 URLS DE TEST RAPIDE');
-console.log('─────────────────────────────────────────────────────────────────────');
-if (publicDomain) {
-  console.log(`   Dashboard Analytics:  ${baseUrl}/api/analytics/dashboard`);
-  console.log(`   Stats Messages:       ${baseUrl}/api/analytics/messages`);
-  console.log(`   Activité Utilisateur: ${baseUrl}/api/analytics/activity`);
-} else {
-  console.log(`   Dashboard Analytics:  Port ${SERVER_CONFIG.API_PORT}/api/analytics/dashboard`);
-  console.log(`   Stats Messages:       Port ${SERVER_CONFIG.API_PORT}/api/analytics/messages`);
-  console.log(`   Activité Utilisateur: Port ${SERVER_CONFIG.API_PORT}/api/analytics/activity`);
-}
-console.log('');
-
-if (isDefaultJWT || !hasDiscordWebhook) {
-  console.log('⚠️  AVERTISSEMENTS');
-  console.log('─────────────────────────────────────────────────────────────────────');
-  if (isDefaultJWT) {
-    console.log('   ⚠️  JWT_SECRET utilise la valeur par défaut!');
-    console.log('       Définissez JWT_SECRET dans vos variables d\'environnement.');
+app.get('/api/connected-users', async (req, res) => {
+  try {
+    const users = await db.getConnectedUsers();
+    res.json({ success: true, users });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
   }
-  if (!hasDiscordWebhook) {
-    console.log('   ℹ️  Discord Webhook non configuré (notifications désactivées)');
-    console.log('       Définissez DISCORD_WEBHOOK_URL pour activer les notifications.');
-  }
-  console.log('');
-}
+});
 
-console.log('✅ TOUS LES SERVEURS SONT OPÉRATIONNELS');
-console.log('─────────────────────────────────────────────────────────────────────');
-console.log('   Prêt à accepter les connexions...');
-console.log('');
-console.log('═══════════════════════════════════════════════════════════════════');
-console.log('');
+// --- GESTION DES ERREURS ---
+app.use((err, req, res, next) => {
+  console.error('Erreur serveur:', err);
+  res.status(500).json({ error: 'Erreur interne du serveur' });
+});
+
+// --- DÉMARRAGE DU SERVEUR ---
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ API Server démarré sur le port ${PORT}`);
+});
+
+export default app;
