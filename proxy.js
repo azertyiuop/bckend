@@ -1,6 +1,7 @@
-const express = require('express');
+import express from 'express';
+import axios from 'axios';
+
 const router = express.Router();
-const axios = require('axios');
 
 /**
  * @route   GET /api/proxy-stream
@@ -35,4 +36,4 @@ router.get('/proxy-stream', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router; // <-- Important pour les modules ES
