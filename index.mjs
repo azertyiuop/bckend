@@ -103,6 +103,9 @@ if (publicDomain) {
   console.log(`      Port:              ${SERVER_CONFIG.API_PORT}`);
   console.log(`      Endpoints:         /analytics, /moderation, /users`);
   console.log('');
+  console.log(`   🔁 Proxy Flux:        ${baseUrl}/api/proxy-stream`); // <-- AJOUTÉ
+  console.log(`      Utilité:           Servir les flux HTTP externes en HTTPS`); // <-- AJOUTÉ
+  console.log('');
   console.log(`   🎥 RTMP:              rtmp://${publicDomain}:${SERVER_CONFIG.RTMP_PORT}/live`);
   console.log('');
   console.log(`   🌐 HLS:               ${baseUrl}`);
@@ -113,13 +116,13 @@ if (publicDomain) {
   console.log(`   🔧 API REST:          Port ${SERVER_CONFIG.API_PORT}/api`);
   console.log(`      Endpoints:         /analytics, /moderation, /users`);
   console.log('');
+  console.log(`   🔁 Proxy Flux:        Port ${SERVER_CONFIG.API_PORT}/api/proxy-stream`); // <-- AJOUTÉ
+  console.log(`      Utilité:           Servir les flux HTTP externes en HTTPS`); // <-- AJOUTÉ
+  console.log('');
   console.log(`   🎥 RTMP:              Port ${SERVER_CONFIG.RTMP_PORT}/live`);
   console.log('');
   console.log(`   🌐 HLS:               Port ${SERVER_CONFIG.HTTP_PORT}`);
 }
-console.log('');
-// Ajout : indication du statut du proxy (utilise le même port API)
-console.log(`   🔁 Proxy:              ${SERVER_CONFIG.API_PORT ? `Démarré sur le port ${SERVER_CONFIG.API_PORT}` : 'Non démarré'}`);
 console.log('');
 
 console.log('💾 BASE DE DONNÉES');
