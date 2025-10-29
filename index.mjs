@@ -1,7 +1,6 @@
 import './websocket-server.mjs';
 import './rtmp.mjs';
 import './api-server.mjs';
-import './discord-bot.mjs';
 import './proxy/proxyServer.mjs';
 import { SERVER_CONFIG } from './config.mjs';
 import os from 'os';
@@ -71,7 +70,6 @@ function getMemoryUsage() {
 const dbInfo = getDatabaseInfo();
 const isProduction = process.env.NODE_ENV === 'production';
 const isDefaultJWT = SERVER_CONFIG.JWT_SECRET === 'your_jwt_secret_change_in_production';
-const hasDiscordWebhook = !!SERVER_CONFIG.DISCORD_WEBHOOK_URL;
 const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.RAILWAY_STATIC_URL;
 const publicDomain = railwayDomain || process.env.PUBLIC_DOMAIN;
 const baseUrl = publicDomain ? `https://${publicDomain}` : 'http://localhost';
@@ -103,8 +101,8 @@ if (publicDomain) {
   console.log(`      Port:              ${SERVER_CONFIG.API_PORT}`);
   console.log(`      Endpoints:         /analytics, /moderation, /users`);
   console.log('');
-  console.log(`   🔁 Proxy Flux:        ${baseUrl}/api/proxy-stream`); // <-- AJOUTÉ
-  console.log(`      Utilité:           Servir les flux HTTP externes en HTTPS`); // <-- AJOUTÉ
+  console.log(`   🔁 Proxy Flux:        ${baseUrl}/api/proxy-stream`);
+  console.log(`      Utilité:           Servir les flux HTTP externes en HTTPS`);
   console.log('');
   console.log(`   🎥 RTMP:              rtmp://${publicDomain}:${SERVER_CONFIG.RTMP_PORT}/live`);
   console.log('');
@@ -116,8 +114,8 @@ if (publicDomain) {
   console.log(`   🔧 API REST:          Port ${SERVER_CONFIG.API_PORT}/api`);
   console.log(`      Endpoints:         /analytics, /moderation, /users`);
   console.log('');
-  console.log(`   🔁 Proxy Flux:        Port ${SERVER_CONFIG.API_PORT}/api/proxy-stream`); // <-- AJOUTÉ
-  console.log(`      Utilité:           Servir les flux HTTP externes en HTTPS`); // <-- AJOUTÉ
+  console.log(`   🔁 Proxy Flux:        Port ${SERVER_CONFIG.API_PORT}/api/proxy-stream`);
+  console.log(`      Utilité:           Servir les flux HTTP externes en HTTPS`);
   console.log('');
   console.log(`   🎥 RTMP:              Port ${SERVER_CONFIG.RTMP_PORT}/live`);
   console.log('');
@@ -137,8 +135,6 @@ console.log('──────────────────────�
 console.log(`   CORS Origins:         ${SERVER_CONFIG.ALLOWED_ORIGINS.join(', ')}`);
 console.log(`   Admin Codes:          ${SERVER_CONFIG.ADMIN_ACCESS_CODES.length} code(s) configuré(s)`);
 console.log(`   JWT Secret:           ${isDefaultJWT ? '⚠️  DÉFAUT (à changer!)' : '✅ Personnalisé'}`);
-console.log(`   Discord Webhook:      ${hasDiscordWebhook ? '✅ Configuré' : '❌ Non configuré'}`);
-console.log(`   Discord Bot:          ${SERVER_CONFIG.DISCORD_BOT_TOKEN ? '✅ Configuré' : '❌ Non configuré'}`);
 console.log('');
 
 console.log('📺 CONFIGURATION OBS STUDIO');
@@ -167,17 +163,11 @@ if (publicDomain) {
 }
 console.log('');
 
-if (isDefaultJWT || !hasDiscordWebhook) {
+if (isDefaultJWT) {
   console.log('⚠️  AVERTISSEMENTS');
   console.log('─────────────────────────────────────────────────────────────────────');
-  if (isDefaultJWT) {
-    console.log('   ⚠️  JWT_SECRET utilise la valeur par défaut!');
-    console.log('       Définissez JWT_SECRET dans vos variables d\'environnement.');
-  }
-  if (!hasDiscordWebhook) {
-    console.log('   ℹ️  Discord Webhook non configuré (notifications désactivées)');
-    console.log('       Définissez DISCORD_WEBHOOK_URL pour activer les notifications.');
-  }
+  console.log('   ⚠️  JWT_SECRET utilise la valeur par défaut!');
+  console.log('       Définissez JWT_SECRET dans vos variables d\'environnement.');
   console.log('');
 }
 
